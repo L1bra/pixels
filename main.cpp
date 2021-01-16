@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <array>
+#include <iomanip>
 
 extern "C" {
 	#define STB_IMAGE_IMPLEMENTATION
@@ -9,13 +10,17 @@ extern "C" {
 
 
 template <typename T>
-std::ostream& operator<<(std::ostream& os, const std::vector<T>& vector)
+void print_array(const T& e)
 {
-	for (auto element : vector)
-	{
-		os << element << " ";
-	}
-	return os;
+	std::cout << std::setw(3) << e << ' ';
+}
+
+template<typename T, std::size_t N>
+void print_array(const std::array<T, N>& A)
+{
+	for (const auto& e : A)
+		print_array(e);
+	std::cout << '\n';
 }
 
 
@@ -34,10 +39,10 @@ bool load_image(std::vector<unsigned char>& image, const std::string& filename, 
 
 int main(int argc, char* argv[])
 {
-	std::string filename = "../resources/filename.jpg";
+	std::string filename = "../resources/file.jpg";
 	const std::size_t RGBA = 4;
 	int width, height;
-	
+
 	std::vector<unsigned char> image;
 	std::vector<std::array<unsigned int, RGBA>> image_rgba;	// ???
 
@@ -51,27 +56,28 @@ int main(int argc, char* argv[])
 	std::cout << "image width = " << width << '\n';
 	std::cout << "image height = " << height << '\n';
 
-	int x = 3;
-	int y = 4;
-	std::size_t i = 0;	// ???
-	std::size_t index = RGBA * (y * width + x);
-
-	// ???
-	for (std::vector<unsigned char>::iterator it = image.begin(); it != image.end(); i++, ++it)
+	for (int x = 0; x < width; x++)
 	{
-		std::array<unsigned int, RGBA> rgba = { static_cast<int>(image[index + (i + 0)]), 
-												static_cast<int>(image[index + (i + 1)]),
-												static_cast<int>(image[index + (i + 2)]),
-												static_cast<int>(image[index + (i + 3)])};
-		image_rgba.push_back(rgba);			    
-	}
-	
+		for (int y = 0; y < height; y++)
+		{
+			std::size_t index = RGBA * (y * width + x);
 
-	//std::cout << "RGBA pixel(" << x << ", " << y << "):" 
-	//	<< static_cast<int>(image[index + 0]) << " "
-	//	<< static_cast<int>(image[index + 1]) << " "
-	//	<< static_cast<int>(image[index + 2]) << " "
-	//	<< static_cast<int>(image[index + 3]) << "\n";
+			std::array<unsigned int, RGBA> rgba = {
+				static_cast<int>(image[index + 0]),
+				static_cast<int>(image[index + 1]),
+				static_cast<int>(image[index + 2]),
+				static_cast<int>(image[index + 3])
+			};
+
+			image_rgba.push_back(rgba);
+		}
+	}
+
+	for (std::vector<std::array<unsigned int, RGBA>>::iterator it = image_rgba.begin(); it != image_rgba.end(); ++it)
+	{
+		print_array(*it);
+	}
+
 
 	system("PAUSE");
 	return 0;
