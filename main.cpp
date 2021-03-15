@@ -2,6 +2,8 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <array>
+#include <iomanip>
 
 // OpenGL
 #include <glad/glad.h>
@@ -24,34 +26,57 @@ enum class Format : uint8_t
 
 // declaration
 
-struct Vector4f
+template<typename T>
+void print_array(const T& e)
+{
+	std::cout << std::setw(3) << e << " ";
+}
+
+
+template<typename T, std::size_t N>
+void print_array(const std::array<T, N>& A)
+{
+	for (const auto& e : A)
+		print_array(+e);
+	std::cout << "\n";
+}
+
+
+typedef struct vec4
 {
 	union 
 	{
 		struct
 		{
-			float x, y, z, a;
+			uint8_t x, y, z, a;
 		};
 
 		struct
 		{
-			float data[4];
+			std::array<uint8_t, 4> xyza;
 		};
 	};
 
-	Vector4f() : Vector4f(0, 0, 0, 0) {}
-	Vector4f(float x, float y, float z, float a)
+	vec4(uint8_t _x, uint8_t _y, uint8_t _z, uint8_t _a)
 		:
-		x(x), y(y), z(z), a(a)
+		x(_x), y(_y), z(_z), a(_a)
 	{}
-};
+
+	//	move semantics (why?)
+	vec4(std::array<uint8_t, 4>&& arr)
+		:
+		xyza(arr)
+	{}
+	
+	vec4() : vec4(0, 0, 0, 0) {}
+} vec4_t;
 
 
 class Sorter
 {
 private:
-	std::vector<unsigned char> raw_image;
-	std::map<std::string, int> image_colors;
+	std::vector<uint8_t> raw_image;
+	std::map<std::array<uint8_t, 4>, int> image_colors;
 
 	int m_Width;
 	int m_Height;
@@ -63,14 +88,12 @@ public:
 	Sorter();
 	~Sorter();
 
-	std::string calculate(std::string& filename);
+	std::array<uint8_t, 4> calculate(const char* filename);
 
 private:
-	bool load_image(std::vector<unsigned char>& image, const std::string& filename, int& x, int& y);
+	bool load_image(std::vector<uint8_t>& image, const std::string& filename, int& x, int& y);
 	std::string get_image_type(std::string& filename);
 };
-
-
 
 
 
@@ -86,13 +109,13 @@ Sorter::Sorter()
 Sorter::~Sorter() {}
 
 
-bool Sorter::load_image(std::vector<unsigned char>& image, const std::string& filename, int& x, int& y)
+bool Sorter::load_image(std::vector<uint8_t>& image, const std::string& filename, int& x, int& y)
 {
 	int n;
 	unsigned char* data = stbi_load(filename.c_str(), &x, &y, &n, 4);	// change last argument to dynamic var
 	if (data != nullptr)
 	{
-		image = std::vector<unsigned char>(data, data + x * y * 4);	// same here
+		image = std::vector<uint8_t>(data, data + x * y * 4);	// same here
 	}
 	stbi_image_free(data);
 	return (data != nullptr);
@@ -105,7 +128,7 @@ std::string Sorter::get_image_type(std::string& filename)
 	return token;	// ???
 }
 
-std::string Sorter::calculate(std::string& filename)
+std::array<uint8_t, 4> Sorter::calculate(const char* filename)
 {
 	bool success = load_image(raw_image, filename, m_Width, m_Height);
 	if (!success)
@@ -121,23 +144,18 @@ std::string Sorter::calculate(std::string& filename)
 		for (int y = 0; y < m_Height; y++)
 		{
 			std::size_t index = RGBA * (y * m_Width + x);
+			
+			std::array<uint8_t, 4> foo = { raw_image[index + 0], raw_image[index + 1], raw_image[index + 2], raw_image[index + 3] };
+			//std::cout << "color: " << +foo[0] << " " << +foo[1] << " " << +foo[2] << " " << +foo[3] << "\n";
+			vec4_t color(std::move(foo));
 
-			std::string rgba = "";
-			rgba += std::to_string(raw_image[index + 0]);
-			rgba += " ";
-			rgba += std::to_string(raw_image[index + 1]);
-			rgba += " ";
-			rgba += std::to_string(raw_image[index + 2]);
-			rgba += " ";
-			rgba += std::to_string(raw_image[index + 3]);
-
-			image_colors.find(rgba) != image_colors.end() ? image_colors[rgba]++ : image_colors[rgba] = 0;
+			image_colors.find(color.xyza) != image_colors.end() ? image_colors[color.xyza]++ : image_colors[color.xyza] = 1;
 		}
 	}
 
-	std::string key = "";
+	std::array<uint8_t, 4> key;
 	unsigned int current_max = 0;
-	for (std::map<std::string, int>::iterator it = image_colors.begin(); it != image_colors.end(); ++it)
+	for (std::map<std::array<uint8_t, 4>, int>::iterator it = image_colors.begin(); it != image_colors.end(); ++it)
 	{
 		if (it->second > current_max)
 		{
@@ -163,6 +181,10 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 
 int main(int argc, char* argv[])
 {
+	Sorter sorter;
+	printf("magic is happening...\n");
+	std::array<uint8_t, 4> uint_color = sorter.calculate("../resources/file.jpg");
+
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -190,15 +212,17 @@ int main(int argc, char* argv[])
 		"layout (location = 0) in vec3 pos;\n"
 		"void main()\n"
 		"{\n"
-		"	gl_Position = vec4(pos.x, pos.y, pos.z, 1.0);\n"
-		"}";
+		"	gl_Position = vec4(pos, 1.0);\n"
+		"}\n";
 
 	const char* fs_source = "#version 330 core\n"
 		"out vec4 frag_color;\n"
+		"uniform vec4 rect_color;\n"
 		"void main()\n"
 		"{\n"
-		"	frag_color = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+		"	frag_color = rect_color;\n"
 		"}\n";
+
 
 	//vertex
 	unsigned int vs = glCreateShader(GL_VERTEX_SHADER);
@@ -246,18 +270,25 @@ int main(int argc, char* argv[])
 
 	// set up vertex data(buffers etc)
 
-	float vertices[] = 
+	float p = (-1.0f - 1.0f) / 3.f;
+
+	float vertices[] =
 	{
-		 0.5f,  0.5f, 0.0f, // top right
-		 0.5f, -0.5f, 0.0f, // bot right
-		-0.5f, -0.5f, 0.0f, // bot left
-		-0.5f,  0.5f, 0.0f  // top left
+		 1.0f,  1.0f, 0.0f,  // top right
+		 1.0f,	p,    0.0f,  // bot right
+		-1.0f,	p,    0.0f,  // bot left
+		-1.0f,  1.0f, 0.0f,  // top left
 	};
 
+	// rectangles
 	unsigned int indices[] =
 	{
-		0, 1, 3,	// first
-		1, 2, 3		// second
+		// first
+		0, 1, 3,
+		1, 2, 3,
+		// second
+
+		// third
 	};
 	
 	unsigned int VBO, VAO, EBO;
@@ -280,7 +311,6 @@ int main(int argc, char* argv[])
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
 
-
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	while (!glfwWindowShouldClose(window))
@@ -294,6 +324,10 @@ int main(int argc, char* argv[])
 
 		// draw
 		glUseProgram(shader_program);
+
+		GLint color_location = glGetUniformLocation(shader_program, "rect_color");
+		glUniform4f(color_location, (uint_color[0] / 255.f), (uint_color[1] / 255.f), (uint_color[2] / 255.f), (uint_color[3] / 255.f));
+
 		glBindVertexArray(VAO);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
@@ -307,17 +341,9 @@ int main(int argc, char* argv[])
 	glDeleteBuffers(1, &EBO);
 	glDeleteProgram(shader_program);
 
-	(void)argc;
-	(void)argv;
-
 	glfwTerminate();
 
-#if 0
-	Sorter sorter;
-	std::string result = sorter.calculate("../resources/file.jpg");
-	
-	std::cout << "color: " << result << "\n";
-#endif
-
+	(void)argc;
+	(void)argv;
 	return 0;
 }
