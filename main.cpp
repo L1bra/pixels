@@ -1,7 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <map>
+#include <unordered_map>
 #include <array>
 #include <iomanip>
 
@@ -16,6 +16,33 @@ extern "C" {
 }
 
 
+namespace util
+{
+	std::vector<std::string> parse_string(const std::string& str, const std::string& del)
+	{
+		std::vector<std::string> tokens;
+		std::size_t previous = 0;
+		std::size_t position = 0;
+
+		do
+		{
+			position = str.find(del, previous);
+			if (position == std::string::npos)
+				position = str.length();
+
+			std::string token = str.substr(previous, position - previous);
+			if (!token.empty())
+				tokens.push_back(token);
+			
+			previous = position + del.length();
+
+		} while (position < str.length() && previous < str.length());
+
+		return tokens;
+	}
+}
+
+
 enum class Format : uint8_t
 {
 	PNG = 0,
@@ -26,69 +53,23 @@ enum class Format : uint8_t
 
 // declaration
 
-template<typename T>
-void print_array(const T& e)
-{
-	std::cout << std::setw(3) << e << " ";
-}
-
-
-template<typename T, std::size_t N>
-void print_array(const std::array<T, N>& A)
-{
-	for (const auto& e : A)
-		print_array(+e);
-	std::cout << "\n";
-}
-
-
-typedef struct vec4
-{
-	union 
-	{
-		struct
-		{
-			uint8_t x, y, z, a;
-		};
-
-		struct
-		{
-			std::array<uint8_t, 4> xyza;
-		};
-	};
-
-	vec4(uint8_t _x, uint8_t _y, uint8_t _z, uint8_t _a)
-		:
-		x(_x), y(_y), z(_z), a(_a)
-	{}
-
-	//	move semantics (why?)
-	vec4(std::array<uint8_t, 4>&& arr)
-		:
-		xyza(arr)
-	{}
-	
-	vec4() : vec4(0, 0, 0, 0) {}
-} vec4_t;
-
-
 class Sorter
 {
 private:
 	std::vector<uint8_t> raw_image;
-	std::map<std::array<uint8_t, 4>, int> image_colors;
+	std::unordered_map<std::string, int> image_colors;
 
 	int m_Width;
 	int m_Height;
 
-	std::size_t RGBA;
+	uint8_t RGBA;
 	std::string filename;
 
 public:
 	Sorter();
 	~Sorter();
 
-	std::array<uint8_t, 4> calculate(const char* filename);
+	std::string calculate(const char* filename);
 
 private:
 	bool load_image(std::vector<uint8_t>& image, const std::string& filename, int& x, int& y);
@@ -101,9 +82,10 @@ private:
 
 Sorter::Sorter()
 	:
-	RGBA(4),
 	m_Width(0),
-	m_Height(0)
+	m_Height(0),
+	RGBA(4),
+	filename("")
 {}
 
 Sorter::~Sorter() {}
@@ -128,7 +110,7 @@ std::string Sorter::get_image_type(std::string& filename)
 	return token;	// ???
 }
 
-std::array<uint8_t, 4> Sorter::calculate(const char* filename)
+std::string Sorter::calculate(const char* filename)
 {
 	bool success = load_image(raw_image, filename, m_Width, m_Height);
 	if (!success)
@@ -139,28 +121,31 @@ std::array<uint8_t, 4> Sorter::calculate(const char* filename)
 	std::cout << "image width = " << m_Width << std::endl;
 	std::cout << "image height = " << m_Height << std::endl;
 
+	std::string key = "";
+	uint32_t current_max = 0;
+
 	for (int x = 0; x < m_Width; x++)
 	{
 		for (int y = 0; y < m_Height; y++)
 		{
-			std::size_t index = RGBA * (y * m_Width + x);
+			uint32_t index = RGBA * (y * m_Width + x);
 			
-			std::array<uint8_t, 4> foo = { raw_image[index + 0], raw_image[index + 1], raw_image[index + 2], raw_image[index + 3] };
-			//std::cout << "color: " << +foo[0] << " " << +foo[1] << " " << +foo[2] << " " << +foo[3] << "\n";
-			vec4_t color(std::move(foo));
+			std::string tmp_str = "";
+			tmp_str += std::to_string(+raw_image[index + 0]);
+			tmp_str += " ";
+			tmp_str += std::to_string(+raw_image[index + 1]);
+			tmp_str += " ";
+			tmp_str += std::to_string(+raw_image[index + 2]);
+			tmp_str += " ";
+			tmp_str += std::to_string(+raw_image[index + 3]);
+			
+			image_colors[tmp_str] ? image_colors[tmp_str]++ : image_colors[tmp_str] = 1;
 
-			image_colors.find(color.xyza) != image_colors.end() ? image_colors[color.xyza]++ : image_colors[color.xyza] = 1;
-		}
-	}
-
-	std::array<uint8_t, 4> key;
-	unsigned int current_max = 0;
-	for (std::map<std::array<uint8_t, 4>, int>::iterator it = image_colors.begin(); it != image_colors.end(); ++it)
-	{
-		if (it->second > current_max)
-		{
-			key = it->first;
-			current_max = it->second;
+			if (current_max < image_colors[tmp_str])
+			{
+				current_max = image_colors[tmp_str];
+				key = tmp_str;
+			}
 		}
 	}
 
@@ -181,9 +166,9 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 
 int main(int argc, char* argv[])
 {
-	Sorter sorter;
 	printf("magic is happening...\n");
-	std::array<uint8_t, 4> uint_color = sorter.calculate("../resources/file.jpg");
+	Sorter sorter;
+	std::string color_str = sorter.calculate("../resources/file1.jpg");
 
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -326,7 +311,8 @@ int main(int argc, char* argv[])
 		glUseProgram(shader_program);
 
 		GLint color_location = glGetUniformLocation(shader_program, "rect_color");
-		glUniform4f(color_location, (uint_color[0] / 255.f), (uint_color[1] / 255.f), (uint_color[2] / 255.f), (uint_color[3] / 255.f));
+		std::vector<std::string> color = util::parse_string(color_str, " ");
+		glUniform4f(color_location, (std::stof(color[0]) / 255.f), (std::stof(color[1]) / 255.f), (std::stof(color[2]) / 255.f), (std::stof(color[3]) / 255.f));
 
 		glBindVertexArray(VAO);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
